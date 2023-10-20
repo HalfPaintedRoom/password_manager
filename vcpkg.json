@@ -8,5 +8,8 @@
   }, {
     "name" : "sqlite3",
     "version>=" : "3.43.1"
+  }, {
+    "name" : "sqlitecpp",
+    "version>=" : "3.3.1"
   } ]
 }

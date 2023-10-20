@@ -3,6 +3,7 @@
 #include <SQLiteCpp/Database.h>
 #include <SQLiteCpp/Statement.h>
 #define LENGTH 20
+#define DATABASE "passwords.db"
 
 struct Password
 {
@@ -10,53 +11,62 @@ struct Password
     std::string password;
 };
 
-std::string generate_password();
-std::string get_service();
-void write_to_database(const std::string& service, const std::string& password);
+void generate_password(Password *new_password);
+void get_service(Password *new_password);
+void write_to_database(Password *new_password);
 
 int main()
 {
-    std::cout << "Password Manager\n";
-    std::cout << "----------------\n";
-    std::cout << "1: Generate new password\n";
-    std::cout << "2: View passwords\n";
-    std::cout << "3: Exit\n";
-
-    int choice;
-    std::cout << "Enter your choice: ";
-    std::cin >> choice;
-
-    if(std::cin.fail())
+    int loop = 1;
+    while(loop)
     {
-        choice = 0;
-    }
+        std::cout << "\nPassword Manager\n";
+        std::cout << "----------------\n";
+        std::cout << "1: Generate new password\n";
+        std::cout << "2: View passwords\n";
+        std::cout << "3: Exit\n";
 
-    switch(choice)
-    {
-        case 1:
+        int choice;
+        std::cout << "Enter your choice: ";
+        std::cin >> choice;
+
+        if(std::cin.fail())
         {
-            Password new_password = {get_service(), generate_password()};
-            if(new_password.service.empty())
+            choice = 0;
+        }
+
+        switch(choice)
+        {
+            case 1:
             {
-                std::cerr << "No service entered" << std::endl;
+                auto *new_password = new Password;
+                get_service(new_password);
+                generate_password(new_password);
+
+                if(new_password->service.empty())
+                {
+                    std::cerr << "No service entered" << std::endl;
+                    break;
+                }
+
+                write_to_database(new_password);
+                std::cout << new_password->service << ": " << new_password->password << std::endl;
                 break;
             }
-            write_to_database(new_password.service, new_password.password);
-            std::cout << new_password.service << ": " << new_password.password;
-            break;
+            case 2:
+                std::cout << "\nNot yet implemented\n";
+                break;
+            case 3:
+                std::cout << "\nExiting...";
+                loop = 0;
+                break;
+            default:
+                std::cout << "\nInvalid input";
         }
-        case 2:
-            std::cout << "Not yet implemented\n";
-            break;
-        case 3:
-            std::cout << "Exiting...";
-            break;
-        default:
-            std::cout << "Invalid input";
     }
 }
 
-std::string generate_password()
+void generate_password(Password *new_password)
 {
     std::string password;
     char characters[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890~`!@#$%^&*()-_=+[{]}\\;:'\"/?.>,<";
@@ -68,30 +78,31 @@ std::string generate_password()
         password += characters[num];
     }
 
-    return password;
+    new_password->password = password;
 }
 
-std::string get_service()
+void get_service(Password *new_password)
 {
     std::string service;
     std::cin.ignore();
 
-    std::cout << "Enter service: ";
+    std::cout << "\nEnter service: ";
     std::getline(std::cin, service, '\n');
 
+    //makes sure string is not empty
     if(service.find_first_not_of(' ') == std::string::npos)
     {
-        return "";
+        new_password->service = "";
     }
 
-    return service;
+    new_password->service = service;
 }
 
-void write_to_database(const std::string& service, const std::string& password)
+void write_to_database(Password *new_password)
 {
     try
     {
-        SQLite::Database db("test.db", SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
+        SQLite::Database db(DATABASE, SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
         SQLite::Statement query(db, "CREATE TABLE IF NOT EXISTS PASSWORDS ("
                                     "SERVICE TEXT NOT NULL,"
                                     "PASSWORD TEXT NOT NULL);");
@@ -99,8 +110,8 @@ void write_to_database(const std::string& service, const std::string& password)
         query.exec();
 
         SQLite::Statement insert(db, "INSERT INTO PASSWORDS (SERVICE, PASSWORD) VALUES (?, ?);");
-        insert.bind(1, service);
-        insert.bind(2, password);
+        insert.bind(1, new_password->service);
+        insert.bind(2, new_password->password);
 
         insert.exec();
     }

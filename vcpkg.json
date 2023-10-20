@@ -1,0 +1,12 @@
+{
+  "name" : "password-manager",
+  "version-string" : "1.0.0",
+  "builtin-baseline" : "2815578f4a3486cec24c9b07d17e18e03bbaf667",
+  "dependencies" : [ {
+    "name" : "libsodium",
+    "version>=" : "1.0.18#9"
+  }, {
+    "name" : "sqlite3",
+    "version>=" : "3.43.1"
+  } ]
+}

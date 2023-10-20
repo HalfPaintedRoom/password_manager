@@ -11,12 +11,27 @@ struct Password
     std::string password;
 };
 
+bool initialize_database(SQLite::Database *db);
 void generate_password(Password *new_password);
 void get_service(Password *new_password);
-void write_to_database(Password *new_password);
+void write_to_database(Password *new_password, SQLite::Database *db);
+void view_passwords(SQLite::Database *db);
 
 int main()
 {
+    if (sodium_init() < 0) {
+        std::cerr << "Sodium library initialization failed" << std::endl;
+        return 1;
+    }
+
+    SQLite::Database db("");
+
+    if(!initialize_database(&db))
+    {
+        std::cerr << "Failed to open database" <<std::endl;
+        return 1;
+    }
+
     int loop = 1;
     while(loop)
     {
@@ -49,12 +64,14 @@ int main()
                     break;
                 }
 
-                write_to_database(new_password);
+                write_to_database(new_password, &db);
                 std::cout << new_password->service << ": " << new_password->password << std::endl;
+
+                delete(new_password);
                 break;
             }
             case 2:
-                std::cout << "\nNot yet implemented\n";
+                view_passwords(&db);
                 break;
             case 3:
                 std::cout << "\nExiting...";
@@ -63,6 +80,27 @@ int main()
             default:
                 std::cout << "\nInvalid input";
         }
+    }
+
+}
+
+bool initialize_database(SQLite::Database *db)
+{
+    try
+    {
+        *db = SQLite::Database(DATABASE, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+        SQLite::Statement query(*db, "CREATE TABLE IF NOT EXISTS PASSWORDS ("
+                                    "SERVICE TEXT NOT NULL,"
+                                    "PASSWORD TEXT NOT NULL);");
+
+        query.exec();
+
+        return true;
+    }
+    catch(std::exception &e)
+    {
+        std::cout << "exception: " << e.what() << std::endl;
+        return false;
     }
 }
 
@@ -98,24 +136,40 @@ void get_service(Password *new_password)
     new_password->service = service;
 }
 
-void write_to_database(Password *new_password)
+void write_to_database(Password *new_password, SQLite::Database *db)
 {
     try
     {
-        SQLite::Database db(DATABASE, SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
-        SQLite::Statement query(db, "CREATE TABLE IF NOT EXISTS PASSWORDS ("
-                                    "SERVICE TEXT NOT NULL,"
-                                    "PASSWORD TEXT NOT NULL);");
-
-        query.exec();
-
-        SQLite::Statement insert(db, "INSERT INTO PASSWORDS (SERVICE, PASSWORD) VALUES (?, ?);");
+        SQLite::Statement insert(*db, "INSERT INTO PASSWORDS (SERVICE, PASSWORD) VALUES (?, ?);");
         insert.bind(1, new_password->service);
         insert.bind(2, new_password->password);
 
         insert.exec();
     }
     catch(std::exception& e)
+    {
+        std::cout << "exception: " << e.what() << std::endl;
+    }
+}
+
+void view_passwords(SQLite::Database *db)
+{
+    try
+    {
+        SQLite::Statement   query(*db, "SELECT * FROM PASSWORDS");
+
+        // Loop to execute the query step by step, to get rows of result
+        for(int i = 1; query.executeStep(); i++)
+        {
+            // Demonstrate how to get some typed column value
+            int         id          = i;
+            std::string service     = query.getColumn(0);
+            std::string password    = query.getColumn(1);
+
+            std::cout << id << ": " << service << " | " << password << std::endl;
+        }
+    }
+    catch (std::exception& e)
     {
         std::cout << "exception: " << e.what() << std::endl;
     }

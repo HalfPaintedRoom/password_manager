@@ -2,6 +2,7 @@
 #include <sodium.h>
 #include <SQLiteCpp/Database.h>
 #include <SQLiteCpp/Statement.h>
+#include <algorithm>
 #define LENGTH 20
 #define DATABASE "passwords.db"
 
@@ -11,8 +12,11 @@ struct Password
     std::string password;
 };
 
+int validate_input();
+std::string trim(std::string &str);
 bool initialize_database(SQLite::Database *db);
 void generate_password(Password *new_password);
+void enter_password(Password *new_password);
 void get_service(Password *new_password);
 void write_to_database(Password *new_password, SQLite::Database *db);
 void view_passwords(SQLite::Database *db);
@@ -41,14 +45,7 @@ int main()
         std::cout << "2: View passwords\n";
         std::cout << "3: Exit\n";
 
-        int choice;
-        std::cout << "Enter your choice: ";
-        std::cin >> choice;
-
-        if(std::cin.fail())
-        {
-            choice = 0;
-        }
+        int choice = validate_input();
 
         switch(choice)
         {
@@ -104,6 +101,35 @@ bool initialize_database(SQLite::Database *db)
     }
 }
 
+int validate_input()
+{
+    int choice;
+    std::cout << "Enter your choice: ";
+    std::cin >> choice;
+
+    if(std::cin.fail())
+    {
+        choice = 0;
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    }
+
+    return choice;
+}
+
+std::string trim(std::string &str)
+{
+    size_t first = str.find_first_not_of(' ');
+    size_t last = str.find_last_not_of(' ');
+
+    if(first == std::string::npos)
+    {
+        return "";
+    }
+
+    return str.substr(first, (last - first + 1));
+}
+
 void generate_password(Password *new_password)
 {
     std::string password;
@@ -127,11 +153,7 @@ void get_service(Password *new_password)
     std::cout << "\nEnter service: ";
     std::getline(std::cin, service, '\n');
 
-    //makes sure string is not empty
-    if(service.find_first_not_of(' ') == std::string::npos)
-    {
-        new_password->service = "";
-    }
+    service = trim(service);
 
     new_password->service = service;
 }

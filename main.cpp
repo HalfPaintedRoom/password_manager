@@ -15,9 +15,10 @@ struct Password
 int validate_input();
 std::string trim(std::string &str);
 bool initialize_database(SQLite::Database *db);
+void new_password_menu(SQLite::Database *db);
 void generate_password(Password *new_password);
-void enter_password(Password *new_password);
 void get_service(Password *new_password);
+void get_password(Password *new_password);
 void write_to_database(Password *new_password, SQLite::Database *db);
 void view_passwords(SQLite::Database *db);
 
@@ -51,20 +52,7 @@ int main()
         {
             case 1:
             {
-                auto *new_password = new Password;
-                get_service(new_password);
-                generate_password(new_password);
-
-                if(new_password->service.empty())
-                {
-                    std::cerr << "No service entered" << std::endl;
-                    break;
-                }
-
-                write_to_database(new_password, &db);
-                std::cout << new_password->service << ": " << new_password->password << std::endl;
-
-                delete(new_password);
+                new_password_menu(&db);
                 break;
             }
             case 2:
@@ -130,6 +118,71 @@ std::string trim(std::string &str)
     return str.substr(first, (last - first + 1));
 }
 
+void new_password_menu(SQLite::Database *db)
+{
+    int loop = 1;
+    while(loop)
+    {
+        auto *new_password = new Password;
+
+        std::cout << "1: Generate new password" << std::endl;
+        std::cout << "2: Enter password" << std::endl;
+        std::cout << "3: Return to main menu" << std::endl;
+
+        int choice = validate_input();
+
+        switch(choice)
+        {
+            case 1:
+            {
+                get_service(new_password);
+                generate_password(new_password);
+
+                if(new_password->service.empty())
+                {
+                    std::cerr << "No service entered" << std::endl;
+                    break;
+                }
+
+                write_to_database(new_password, db);
+                std::cout << new_password->service << ": " << new_password->password << std::endl;
+
+                delete(new_password);
+                break;
+            }
+            case 2:
+            {
+                get_service(new_password);
+                get_password(new_password);
+
+                if(new_password->service.empty())
+                {
+                    std::cerr << "No service entered" << std::endl;
+                    break;
+                }
+
+                if(new_password->password.empty())
+                {
+                    std::cerr << "No password entered" << std::endl;
+                    break;
+                }
+
+                write_to_database(new_password, db);
+                std::cout << new_password->service << ": " << new_password->password << std::endl;
+
+                delete(new_password);
+                break;
+            }
+            case 3:
+                loop = 0;
+                delete(new_password);
+                break;
+            default:
+                std::cout << "\nInvalid Input";
+        }
+    }
+}
+
 void generate_password(Password *new_password)
 {
     std::string password;
@@ -158,6 +211,18 @@ void get_service(Password *new_password)
     new_password->service = service;
 }
 
+void get_password(Password *new_password)
+{
+    std::string password;
+
+    std::cout << "Enter password: ";
+    std::cin >> password;
+
+    password = trim(password);
+
+    new_password->password = password;
+}
+
 void write_to_database(Password *new_password, SQLite::Database *db)
 {
     try
@@ -180,6 +245,7 @@ void view_passwords(SQLite::Database *db)
     {
         SQLite::Statement   query(*db, "SELECT * FROM PASSWORDS");
 
+        std::cout << "\n";
         // Loop to execute the query step by step, to get rows of result
         for(int i = 1; query.executeStep(); i++)
         {

@@ -5,6 +5,7 @@
 #include <algorithm>
 #define LENGTH 20
 #define DATABASE "passwords.db"
+int num_passwords = 0;
 
 struct Password
 {
@@ -15,13 +16,15 @@ struct Password
 int validate_input();
 std::string trim(std::string &str);
 bool initialize_database(SQLite::Database *db);
-void generate_password(Password *new_password);
-void new_password_menu(SQLite::Database *db);
+void count_rows(SQLite::Database *db);
 void show_passwords_menu(SQLite::Database *db);
+void display_passwords(SQLite::Database *db);
+void new_password_menu(SQLite::Database *db);
+void delete_password(SQLite::Database *db);
+void generate_password(Password *new_password);
 void get_service(Password *new_password);
 void get_password(Password *new_password);
 void write_to_database(Password *new_password, SQLite::Database *db);
-void display_passwords(SQLite::Database *db);
 
 int main()
 {
@@ -67,27 +70,6 @@ int main()
                 std::cout << "\nInvalid input";
         }
     }
-
-}
-
-bool initialize_database(SQLite::Database *db)
-{
-    try
-    {
-        *db = SQLite::Database(DATABASE, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
-        SQLite::Statement query(*db, "CREATE TABLE IF NOT EXISTS PASSWORDS ("
-                                    "SERVICE TEXT NOT NULL,"
-                                    "PASSWORD TEXT NOT NULL);");
-
-        query.exec();
-
-        return true;
-    }
-    catch(std::exception &e)
-    {
-        std::cout << "exception: " << e.what() << std::endl;
-        return false;
-    }
 }
 
 int validate_input()
@@ -117,6 +99,105 @@ std::string trim(std::string &str)
     }
 
     return str.substr(first, (last - first + 1));
+}
+
+bool initialize_database(SQLite::Database *db)
+{
+    try
+    {
+        *db = SQLite::Database(DATABASE, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
+        SQLite::Statement query(*db, "CREATE TABLE IF NOT EXISTS PASSWORDS ("
+                                    "SERVICE TEXT NOT NULL,"
+                                    "PASSWORD TEXT NOT NULL);");
+
+        query.exec();
+
+        count_rows(db);
+
+        return true;
+    }
+    catch(std::exception &e)
+    {
+        std::cout << "exception: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+void count_rows(SQLite::Database *db)
+{
+    SQLite::Statement query(*db, "SELECT COUNT(*) FROM PASSWORDS");
+
+    if(query.executeStep())
+    {
+        num_passwords = query.getColumn(0).getInt();
+    }
+    else
+    {
+        std::cerr << "Could not count rows" << std::endl;
+        return;
+    }
+}
+
+void show_passwords_menu(SQLite::Database *db)
+{
+    int loop = 1;
+    while(loop)
+    {
+        display_passwords(db);
+
+        std::cout << "\n1: Edit Password\n";
+        std::cout << "2: Delete Password\n";
+        std::cout << "3: Return to Main Menu\n";
+
+        int choice = validate_input();
+        switch(choice)
+        {
+            case 1:
+                std::cout << "Not implemented yet" << std::endl;
+                break;
+            case 2:
+                delete_password(db);
+                break;
+            case 3:
+                loop = 0;
+                break;
+            default:
+                std::cout << "Invalid input" << std::endl;
+                break;
+        }
+    }
+}
+
+void display_passwords(SQLite::Database *db)
+{
+    try
+    {
+        SQLite::Statement query(*db, "SELECT * FROM PASSWORDS");
+
+        std::cout << "\n";
+
+        for(int i = 1; query.executeStep(); i++)
+        {
+            int         id          = i;
+            std::string service     = query.getColumn(0);
+            std::string password    = query.getColumn(1);
+
+            std::cout << id << ": " << service << " | " << password << std::endl;
+        }
+    }
+    catch (std::exception& e)
+    {
+        std::cout << "exception: " << e.what() << std::endl;
+    }
+}
+
+void delete_password(SQLite::Database *db)
+{
+    std::cout << num_passwords;
+
+    std::cout << "Which password would you like to delete: ";
+    int choice = validate_input();
+
 }
 
 void new_password_menu(SQLite::Database *db)
@@ -179,36 +260,6 @@ void new_password_menu(SQLite::Database *db)
     }
 }
 
-void show_passwords_menu(SQLite::Database *db)
-{
-    int loop = 1;
-    while(loop)
-    {
-        display_passwords(db);
-
-        std::cout << "\n1: Edit Password\n";
-        std::cout << "2: Delete Password";
-        std::cout << "3: Return to Main Menu";
-
-        int choice = validate_input();
-        switch(choice)
-        {
-            case 1:
-                std::cout << "Not implemented yet" << std::endl;
-                break;
-            case 2:
-                std::cout << "Not implemented yet" << std::endl;
-                break;
-            case 3:
-                loop = 0;
-                break;
-            default:
-                std::cout << "Invalid input" << std::endl;
-                break;
-        }
-    }
-}
-
 void generate_password(Password *new_password)
 {
     std::string password;
@@ -260,30 +311,6 @@ void write_to_database(Password *new_password, SQLite::Database *db)
         insert.exec();
     }
     catch(std::exception& e)
-    {
-        std::cout << "exception: " << e.what() << std::endl;
-    }
-}
-
-void display_passwords(SQLite::Database *db)
-{
-    try
-    {
-        SQLite::Statement   query(*db, "SELECT * FROM PASSWORDS");
-
-        std::cout << "\n";
-        // Loop to execute the query step by step, to get rows of result
-        for(int i = 1; query.executeStep(); i++)
-        {
-            // Demonstrate how to get some typed column value
-            int         id          = i;
-            std::string service     = query.getColumn(0);
-            std::string password    = query.getColumn(1);
-
-            std::cout << id << ": " << service << " | " << password << std::endl;
-        }
-    }
-    catch (std::exception& e)
     {
         std::cout << "exception: " << e.what() << std::endl;
     }

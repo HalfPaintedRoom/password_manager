@@ -13,6 +13,8 @@ struct Password
     std::string password;
 };
 
+//function prototypes
+//function definitions should be in the same order that they are here
 int validate_input();
 std::string trim(std::string &str);
 bool initialize_database(SQLite::Database *db);
@@ -37,7 +39,7 @@ int main()
 
     if(!initialize_database(&db))
     {
-        std::cerr << "Failed to open database" <<std::endl;
+        std::cerr << "Failed to open database" << std::endl;
         return 1;
     }
 
@@ -46,8 +48,8 @@ int main()
     {
         std::cout << "\nPassword Manager\n";
         std::cout << "----------------\n";
-        std::cout << "1: New password\n";
-        std::cout << "2: View passwords\n";
+        std::cout << "1: View passwords\n";
+        std::cout << "2: New password\n";
         std::cout << "3: Exit\n";
 
         int choice = validate_input();
@@ -56,11 +58,11 @@ int main()
         {
             case 1:
             {
-                new_password_menu(&db);
+                show_passwords_menu(&db);
                 break;
             }
             case 2:
-                show_passwords_menu(&db);
+                new_password_menu(&db);
                 break;
             case 3:
                 std::cout << "\nExiting...";
@@ -107,12 +109,10 @@ bool initialize_database(SQLite::Database *db)
     {
         *db = SQLite::Database(DATABASE, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
         SQLite::Statement query(*db, "CREATE TABLE IF NOT EXISTS PASSWORDS ("
-                                    "SERVICE TEXT NOT NULL,"
-                                    "PASSWORD TEXT NOT NULL);");
+                                     "SERVICE TEXT NOT NULL,"
+                                     "PASSWORD TEXT NOT NULL);");
 
         query.exec();
-
-        count_rows(db);
 
         return true;
     }
@@ -140,6 +140,7 @@ void count_rows(SQLite::Database *db)
 
 void show_passwords_menu(SQLite::Database *db)
 {
+
     int loop = 1;
     while(loop)
     {
@@ -168,11 +169,20 @@ void show_passwords_menu(SQLite::Database *db)
     }
 }
 
+//displays all passwords in the menu
 void display_passwords(SQLite::Database *db)
 {
     try
     {
         SQLite::Statement query(*db, "SELECT * FROM PASSWORDS");
+
+        count_rows(db);
+
+        if(num_passwords == 0)
+        {
+            std::cout << "No passwords to display" << std::endl;
+            return;
+        }
 
         std::cout << "\n";
 
@@ -184,6 +194,7 @@ void display_passwords(SQLite::Database *db)
 
             std::cout << id << ": " << service << " | " << password << std::endl;
         }
+
     }
     catch (std::exception& e)
     {
@@ -191,15 +202,37 @@ void display_passwords(SQLite::Database *db)
     }
 }
 
+//deletes the selected password from the database
 void delete_password(SQLite::Database *db)
 {
-    std::cout << num_passwords;
-
-    std::cout << "Which password would you like to delete: ";
+    std::cout << "Which password would you like to delete\n";
     int choice = validate_input();
 
+    if(choice == 0 || choice > num_passwords)
+    {
+        std::cerr << "Not a valid input" << std::endl;
+        return;
+    }
+
+    std::cout << choice << std::endl;
+
+    SQLite::Statement query(*db, "DELETE FROM PASSWORDS WHERE ROWID = ?");
+
+    query.bind(1, choice+1);
+
+    if (query.exec() == 1) {
+        // Deletion was successful
+        SQLite::Statement update_IDs(*db, "UPDATE PASSWORDS SET ROWID = ROWID - 1 WHERE ROWID > ?");
+        update_IDs.bind(1, choice);
+        update_IDs.exec();
+
+        num_passwords--;
+    } else {
+        std::cerr << "Failed to delete the password" << std::endl;
+    }
 }
 
+//menu for user to select how they would like to enter a new password
 void new_password_menu(SQLite::Database *db)
 {
     auto *new_password = new Password;
@@ -260,6 +293,7 @@ void new_password_menu(SQLite::Database *db)
     }
 }
 
+//generates a random password using libsodium
 void generate_password(Password *new_password)
 {
     std::string password;

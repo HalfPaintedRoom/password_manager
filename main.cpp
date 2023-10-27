@@ -34,6 +34,7 @@ void write_to_database(Password *new_password, SQLite::Database *db);
 std::string encrypt_data(std::string &data_to_encrypt, std::string &key);
 std::string decrypt_data(std::string &data_to_decrypt, std::string &key);
 bool check_master_pass(SQLite::Database *db);
+std::string hash_password();
 
 int main()
 {
@@ -435,7 +436,9 @@ bool check_master_pass(SQLite::Database *db)
 
         get_password(&master_pass);
 
-        if(master_pass == hash)
+        std::string hashed_master = hash_password();
+
+        if(hashed_master == hash)
         {
             return true;
         }
@@ -451,9 +454,27 @@ bool check_master_pass(SQLite::Database *db)
 
         SQLite::Statement update(*db, "INSERT INTO USER_AUTH (MASTER_PASS) VALUES (?)");
 
-        update.bind(1, master_pass);
+        std::string hashed_master = hash_password();
+
+        update.bind(1, hashed_master);
         update.exec();
 
         return true;
     }
+}
+
+std::string hash_password()
+{
+    std::vector<unsigned char> hash(crypto_generichash_BYTES);
+
+    crypto_generichash(hash.data(),
+                       hash.size(),
+                       reinterpret_cast<const unsigned char*>(master_pass.c_str()),
+                       master_pass.size(),
+                       nullptr,
+                       0);
+
+    std::string hashed(hash.begin(), hash.end());
+
+    return hashed;
 }

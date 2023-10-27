@@ -1,10 +1,13 @@
 #include <iostream>
+#include <vector>
 #include <sodium.h>
 #include <SQLiteCpp/Database.h>
 #include <SQLiteCpp/Statement.h>
 #include <algorithm>
+
 #define LENGTH 20
 #define DATABASE "passwords.db"
+
 int num_passwords = 0;
 
 struct Password
@@ -27,10 +30,13 @@ void generate_password(Password *new_password);
 void get_service(Password *new_password);
 void get_password(Password *new_password);
 void write_to_database(Password *new_password, SQLite::Database *db);
+std::string encrypt_data(std::string &data_to_encrypt, std::string &key);
+std::string decrypt_data(std::string &data_to_decrypt, std::string &key);
 
 int main()
 {
-    if (sodium_init() < 0) {
+    if(sodium_init() < 0)
+    {
         std::cerr << "Sodium library initialization failed" << std::endl;
         return 1;
     }
@@ -130,8 +136,7 @@ void count_rows(SQLite::Database *db)
     if(query.executeStep())
     {
         num_passwords = query.getColumn(0).getInt();
-    }
-    else
+    } else
     {
         std::cerr << "Could not count rows" << std::endl;
         return;
@@ -186,17 +191,25 @@ void display_passwords(SQLite::Database *db)
 
         std::cout << "\n";
 
+        std::string key = "1234";
+
         for(int i = 1; query.executeStep(); i++)
         {
-            int         id          = i;
-            std::string service     = query.getColumn(0);
-            std::string password    = query.getColumn(1);
+            int id = i;
+            std::string service = query.getColumn(0);
+            std::string password = query.getColumn(1);
+
+            password = decrypt_data(password, key);
+            service = decrypt_data(service, key);
+
+            service = trim(service);
+            password = trim(password);
 
             std::cout << id << ": " << service << " | " << password << std::endl;
         }
 
     }
-    catch (std::exception& e)
+    catch(std::exception &e)
     {
         std::cout << "exception: " << e.what() << std::endl;
     }
@@ -218,16 +231,18 @@ void delete_password(SQLite::Database *db)
 
     SQLite::Statement query(*db, "DELETE FROM PASSWORDS WHERE ROWID = ?");
 
-    query.bind(1, choice+1);
+    query.bind(1, choice + 1);
 
-    if (query.exec() == 1) {
+    if(query.exec() == 1)
+    {
         // Deletion was successful
-        SQLite::Statement update_IDs(*db, "UPDATE PASSWORDS SET ROWID = ROWID - 1 WHERE ROWID > ?");
-        update_IDs.bind(1, choice);
-        update_IDs.exec();
+        SQLite::Statement update_ids(*db, "UPDATE PASSWORDS SET ROWID = ROWID - 1 WHERE ROWID > ?");
+        update_ids.bind(1, choice);
+        update_ids.exec();
 
         num_passwords--;
-    } else {
+    } else
+    {
         std::cerr << "Failed to delete the password" << std::endl;
     }
 }
@@ -257,9 +272,8 @@ void new_password_menu(SQLite::Database *db)
             }
 
             write_to_database(new_password, db);
-            std::cout << new_password->service << ": " << new_password->password << std::endl;
 
-            delete(new_password);
+            delete (new_password);
             break;
         }
         case 2:
@@ -280,13 +294,12 @@ void new_password_menu(SQLite::Database *db)
             }
 
             write_to_database(new_password, db);
-            std::cout << new_password->service << ": " << new_password->password << std::endl;
 
-            delete(new_password);
+            delete (new_password);
             break;
         }
         case 3:
-            delete(new_password);
+            delete (new_password);
             break;
         default:
             std::cout << "\nInvalid Input";
@@ -305,6 +318,8 @@ void generate_password(Password *new_password)
         uint32_t num = randombytes_uniform(char_size);
         password += characters[num];
     }
+
+    std::cout << new_password->service << ": " << password << std::endl;
 
     new_password->password = password;
 }
@@ -339,13 +354,68 @@ void write_to_database(Password *new_password, SQLite::Database *db)
     try
     {
         SQLite::Statement insert(*db, "INSERT INTO PASSWORDS (SERVICE, PASSWORD) VALUES (?, ?);");
-        insert.bind(1, new_password->service);
-        insert.bind(2, new_password->password);
+
+        std::string key = "1234";
+        std::string encrypted_service = encrypt_data(new_password->service, key);
+        std::string encrypted_password = encrypt_data(new_password->password, key);
+
+        encrypted_service = trim(encrypted_service);
+        encrypted_password = trim(encrypted_password);
+
+        insert.bind(1, encrypted_service);
+        insert.bind(2, encrypted_password);
 
         insert.exec();
     }
-    catch(std::exception& e)
+    catch(std::exception &e)
     {
         std::cout << "exception: " << e.what() << std::endl;
     }
+}
+
+std::string encrypt_data(std::string &data_to_encrypt, std::string &key)
+{
+    std::vector<unsigned char> cipher_text(crypto_secretbox_MACBYTES + data_to_encrypt.size());
+    std::vector<unsigned char> nonce(crypto_secretbox_NONCEBYTES);
+
+    randombytes_buf(nonce.data(), nonce.size());
+
+    crypto_secretbox_easy(
+            cipher_text.data(),
+            reinterpret_cast<const unsigned char*>(data_to_encrypt.c_str()),
+            data_to_encrypt.size(),
+            nonce.data(),
+            reinterpret_cast<const unsigned char*>(key.c_str()));
+
+    std::vector<unsigned char> combined_data(nonce.begin(), nonce.end());
+    combined_data.insert(combined_data.end(), cipher_text.begin(), cipher_text.end());
+
+    std::string encrypted(combined_data.begin(), combined_data.end());
+
+    return encrypted;
+}
+
+std::string decrypt_data(std::string &data_to_decrypt, std::string &key)
+{
+    std::vector<unsigned char> combined_data(data_to_decrypt.begin(), data_to_decrypt.end());
+    std::vector<unsigned char> nonce(combined_data.begin(), combined_data.begin() + crypto_secretbox_NONCEBYTES);
+    std::vector<unsigned char> cipher_text(combined_data.begin() + crypto_secretbox_NONCEBYTES, combined_data.end());
+
+    std::vector<unsigned char> decrypted_text(data_to_decrypt.size() - crypto_secretbox_NONCEBYTES);
+
+    if(crypto_secretbox_open_easy(
+            decrypted_text.data(),
+            cipher_text.data(),
+            cipher_text.size(),
+            nonce.data(),
+            reinterpret_cast<const unsigned char*>(key.c_str())
+            ) != 0)
+    {
+        std::cerr << "Failed to decrypt password";
+        return "";
+    }
+
+    std::string data(decrypted_text.begin(), decrypted_text.end());
+
+    return data;
 }

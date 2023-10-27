@@ -9,6 +9,7 @@
 #define DATABASE "passwords.db"
 
 int num_passwords = 0;
+std::string master_pass;
 
 struct Password
 {
@@ -27,11 +28,13 @@ void display_passwords(SQLite::Database *db);
 void new_password_menu(SQLite::Database *db);
 void delete_password(SQLite::Database *db);
 void generate_password(Password *new_password);
-void get_service(Password *new_password);
-void get_password(Password *new_password);
+void get_service(std::string *new_service);
+void get_password(std::string *new_password);
 void write_to_database(Password *new_password, SQLite::Database *db);
 std::string encrypt_data(std::string &data_to_encrypt, std::string &key);
 std::string decrypt_data(std::string &data_to_decrypt, std::string &key);
+bool check_master_pass(SQLite::Database *db);
+std::string hash_password();
 
 int main()
 {
@@ -46,6 +49,12 @@ int main()
     if(!initialize_database(&db))
     {
         std::cout << "Failed to open database" << std::endl;
+        return 1;
+    }
+
+    if(!check_master_pass(&db))
+    {
+        std::cout << "Invalid password" << std::endl;
         return 1;
     }
 
@@ -113,12 +122,17 @@ bool initialize_database(SQLite::Database *db)
 {
     try
     {
+
         *db = SQLite::Database(DATABASE, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
         SQLite::Statement query(*db, "CREATE TABLE IF NOT EXISTS PASSWORDS ("
                                      "SERVICE TEXT NOT NULL,"
                                      "PASSWORD TEXT NOT NULL);");
 
         query.exec();
+
+        SQLite::Statement user_auth(*db, "CREATE TABLE IF NOT EXISTS USER_AUTH ("
+                                         "MASTER_PASS TEXT NOT NULL);");
+        user_auth.exec();
 
         return true;
     }
@@ -191,16 +205,14 @@ void display_passwords(SQLite::Database *db)
 
         std::cout << "\n";
 
-        std::string key = "1234";
-
         for(int i = 1; query.executeStep(); i++)
         {
             int id = i;
             std::string service = query.getColumn(0);
             std::string password = query.getColumn(1);
 
-            service = decrypt_data(service, key);
-            password = decrypt_data(password, key);
+            service = decrypt_data(service, master_pass);
+            password = decrypt_data(password, master_pass);
 
             std::cout << id << ": " << service << " | " << password << std::endl;
         }
@@ -259,7 +271,7 @@ void new_password_menu(SQLite::Database *db)
     {
         case 1:
         {
-            get_service(new_password);
+            get_service(&new_password->service);
             generate_password(new_password);
 
             if(new_password->service.empty())
@@ -275,8 +287,8 @@ void new_password_menu(SQLite::Database *db)
         }
         case 2:
         {
-            get_service(new_password);
-            get_password(new_password);
+            get_service(&new_password->service);
+            get_password(&new_password->password);
 
             if(new_password->service.empty())
             {
@@ -321,7 +333,7 @@ void generate_password(Password *new_password)
     new_password->password = password;
 }
 
-void get_service(Password *new_password)
+void get_service(std::string *new_service)
 {
     std::string service;
     std::cin.ignore();
@@ -331,10 +343,10 @@ void get_service(Password *new_password)
 
     service = trim(service);
 
-    new_password->service = service;
+    *new_service = service;
 }
 
-void get_password(Password *new_password)
+void get_password(std::string *new_password)
 {
     std::string password;
 
@@ -343,7 +355,7 @@ void get_password(Password *new_password)
 
     password = trim(password);
 
-    new_password->password = password;
+    *new_password = password;
 }
 
 void write_to_database(Password *new_password, SQLite::Database *db)
@@ -352,9 +364,8 @@ void write_to_database(Password *new_password, SQLite::Database *db)
     {
         SQLite::Statement insert(*db, "INSERT INTO PASSWORDS (SERVICE, PASSWORD) VALUES (?, ?);");
 
-        std::string key = "1234";
-        std::string encrypted_service = encrypt_data(new_password->service, key);
-        std::string encrypted_password = encrypt_data(new_password->password, key);
+        std::string encrypted_service = encrypt_data(new_password->service, master_pass);
+        std::string encrypted_password = encrypt_data(new_password->password, master_pass);
 
         insert.bind(1, encrypted_service);
         insert.bind(2, encrypted_password);
@@ -413,4 +424,57 @@ std::string decrypt_data(std::string &data_to_decrypt, std::string &key)
     std::string data(reinterpret_cast<char*>(decrypted_text.data()));
 
     return data;
+}
+
+bool check_master_pass(SQLite::Database *db)
+{
+    SQLite::Statement query(*db, "SELECT MASTER_PASS FROM USER_AUTH");
+
+    if(query.executeStep())
+    {
+        std::string hash = query.getColumn(0);
+
+        get_password(&master_pass);
+
+        std::string hashed_master = hash_password();
+
+        if(hashed_master == hash)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    else
+    {
+        std::cout << "No master password detected" << std::endl;
+        get_password(&master_pass);
+
+        SQLite::Statement update(*db, "INSERT INTO USER_AUTH (MASTER_PASS) VALUES (?)");
+
+        std::string hashed_master = hash_password();
+
+        update.bind(1, hashed_master);
+        update.exec();
+
+        return true;
+    }
+}
+
+std::string hash_password()
+{
+    std::vector<unsigned char> hash(crypto_generichash_BYTES);
+
+    crypto_generichash(hash.data(),
+                       hash.size(),
+                       reinterpret_cast<const unsigned char*>(master_pass.c_str()),
+                       master_pass.size(),
+                       nullptr,
+                       0);
+
+    std::string hashed(hash.begin(), hash.end());
+
+    return hashed;
 }

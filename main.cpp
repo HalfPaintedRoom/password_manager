@@ -37,7 +37,7 @@ int main()
 {
     if(sodium_init() < 0)
     {
-        std::cerr << "Sodium library initialization failed" << std::endl;
+        std::cout << "Sodium library initialization failed" << std::endl;
         return 1;
     }
 
@@ -45,7 +45,7 @@ int main()
 
     if(!initialize_database(&db))
     {
-        std::cerr << "Failed to open database" << std::endl;
+        std::cout << "Failed to open database" << std::endl;
         return 1;
     }
 
@@ -138,7 +138,7 @@ void count_rows(SQLite::Database *db)
         num_passwords = query.getColumn(0).getInt();
     } else
     {
-        std::cerr << "Could not count rows" << std::endl;
+        std::cout << "Could not count rows" << std::endl;
         return;
     }
 }
@@ -199,11 +199,8 @@ void display_passwords(SQLite::Database *db)
             std::string service = query.getColumn(0);
             std::string password = query.getColumn(1);
 
-            password = decrypt_data(password, key);
             service = decrypt_data(service, key);
-
-            service = trim(service);
-            password = trim(password);
+            password = decrypt_data(password, key);
 
             std::cout << id << ": " << service << " | " << password << std::endl;
         }
@@ -223,7 +220,7 @@ void delete_password(SQLite::Database *db)
 
     if(choice == 0 || choice > num_passwords)
     {
-        std::cerr << "Not a valid input" << std::endl;
+        std::cout << "Not a valid input" << std::endl;
         return;
     }
 
@@ -231,7 +228,7 @@ void delete_password(SQLite::Database *db)
 
     SQLite::Statement query(*db, "DELETE FROM PASSWORDS WHERE ROWID = ?");
 
-    query.bind(1, choice + 1);
+    query.bind(1, choice);
 
     if(query.exec() == 1)
     {
@@ -243,7 +240,7 @@ void delete_password(SQLite::Database *db)
         num_passwords--;
     } else
     {
-        std::cerr << "Failed to delete the password" << std::endl;
+        std::cout << "Failed to delete the password" << std::endl;
     }
 }
 
@@ -267,7 +264,7 @@ void new_password_menu(SQLite::Database *db)
 
             if(new_password->service.empty())
             {
-                std::cerr << "No service entered" << std::endl;
+                std::cout << "No service entered" << std::endl;
                 break;
             }
 
@@ -283,13 +280,13 @@ void new_password_menu(SQLite::Database *db)
 
             if(new_password->service.empty())
             {
-                std::cerr << "No service entered" << std::endl;
+                std::cout << "No service entered" << std::endl;
                 break;
             }
 
             if(new_password->password.empty())
             {
-                std::cerr << "No password entered" << std::endl;
+                std::cout << "No password entered" << std::endl;
                 break;
             }
 
@@ -359,9 +356,6 @@ void write_to_database(Password *new_password, SQLite::Database *db)
         std::string encrypted_service = encrypt_data(new_password->service, key);
         std::string encrypted_password = encrypt_data(new_password->password, key);
 
-        encrypted_service = trim(encrypted_service);
-        encrypted_password = trim(encrypted_password);
-
         insert.bind(1, encrypted_service);
         insert.bind(2, encrypted_password);
 
@@ -411,11 +405,12 @@ std::string decrypt_data(std::string &data_to_decrypt, std::string &key)
             reinterpret_cast<const unsigned char*>(key.c_str())
             ) != 0)
     {
-        std::cerr << "Failed to decrypt password";
+        std::cout << "Failed to decrypt password";
         return "";
     }
 
-    std::string data(decrypted_text.begin(), decrypted_text.end());
+    decrypted_text.push_back('\0');
+    std::string data(reinterpret_cast<char*>(decrypted_text.data()));
 
     return data;
 }
